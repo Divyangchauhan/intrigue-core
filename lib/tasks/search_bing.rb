@@ -1,7 +1,6 @@
 module Intrigue
 module Task
 class SearchBing < BaseTask
-  include Intrigue::Task::Parse
 
   def self.metadata
     {
@@ -37,8 +36,9 @@ class SearchBing < BaseTask
       bing = Client::Search::Bing::SearchService.new(api_key)
       results = bing.search(entity_name)
 
-      unless results
+      unless results && results["webPages"]
         _log_error "Unable to query... are you sure your api key is correct?"
+        _log "Got response: #{results}"
         return
       end
 

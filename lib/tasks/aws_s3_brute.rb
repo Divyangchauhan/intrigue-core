@@ -13,7 +13,7 @@ class AwsS3Brute < BaseTask
       :references => [],
       :type => "discovery",
       :passive => true,
-      :allowed_types => ["DnsRecord","EmailAddress","IpAddress","Person","Organization","String"],
+      :allowed_types => ["DnsRecord","Domain","EmailAddress","IpAddress","Person","Organization","String"],
       :example_entities => [
         {"type" => "String", "details" => {"name" => "test"}}
       ],
@@ -60,12 +60,13 @@ class AwsS3Brute < BaseTask
       # Add permutations
       if opt_permute
         begin
+          
           # AWS is case sensitive.
           # https://forums.aws.amazon.com/thread.jspa?threadID=19928
           first_letter_cap = "#{pb.strip}".slice(0,1).upcase + "#{pb.strip}".slice(1..-1)
-          work_q << "#{first_letter_cap}" unless "#{first_letter_cap}" == "#{pb.strip}"
-          work_q << "#{pb.strip.upcase}" unless "#{pb.strip.upcase}" == "#{pb.strip}"
-          work_q << "#{pb.strip.downcase}" unless "#{pb.strip.downcase}" == "#{pb.strip}"
+          #work_q << "#{first_letter_cap}" unless "#{first_letter_cap}" == "#{pb.strip}"
+          #work_q << "#{pb.strip.upcase}" unless "#{pb.strip.upcase}" == "#{pb.strip}"
+          #work_q << "#{pb.strip.downcase}" unless "#{pb.strip.downcase}" == "#{pb.strip}"
 
           # General development permutations
           work_q << "#{pb.strip}-backup"
@@ -94,6 +95,7 @@ class AwsS3Brute < BaseTask
           work_q << "staging-#{pb.strip}"
           work_q << "test-#{pb.strip}"
           work_q << "web-#{pb.strip}"
+          
         rescue TypeError => e
           puts "Unable to permute: #{pb}, failing"
         end
@@ -110,6 +112,8 @@ class AwsS3Brute < BaseTask
             #skip anything that isn't a real name
             next unless bucket_name && bucket_name.length > 0
 
+            s3_uri = "https://#{bucket_name}.s3.amazonaws.com"
+
             # Authenticated method
             if opt_use_creds
 
@@ -125,36 +129,55 @@ class AwsS3Brute < BaseTask
               Aws.config[:credentials] = Aws::Credentials.new(access_key_id, secret_access_key)
               exists = check_existence_authenticated(bucket_name)
 
-              # create our entity and store the username with it
-              _create_entity("AwsS3Bucket", {
-                "name" => "#{s3_uri}",
-                "uri" => "#{s3_uri}",
-                "authenticated" => true,
-                "username" => access_key_id
-              }) if exists
+              if exists
+                # create our entity and store the username with it
+                _create_entity("AwsS3Bucket", {
+                  "name" => "#{s3_uri}",
+                  "uri" => "#{s3_uri}",
+                  "authenticated" => true,
+                  "username" => access_key_id
+                })
+              
+                # create a bucket issue
+                _create_linked_issue "aws_s3_bucket_readable", {uri:  s3_uri, public: false}
+              end
 
             #########################
             # Unauthenticated check #
             #########################
             else
+            
+              exists = check_existence_unauthenticated(s3_uri,bucket_name)
 
-              s3_uri = "https://#{bucket_name}.s3.amazonaws.com"
-              exists = check_existence_unauthenticated(s3_uri)
-              _create_entity("AwsS3Bucket", {
-                "name" => "#{s3_uri}",
-                "uri" => "#{s3_uri}",
-                "authenticated" => false
-              }) if exists
+              if exists
+                _create_entity("AwsS3Bucket", {
+                  "name" => "#{s3_uri}",
+                  "uri" => "#{s3_uri}",
+                  "authenticated" => false
+                }) 
 
-              next if exists ## Only proceed if we got an error above (bucket exists!) !!!
+                # create a bucket issue
+                _create_linked_issue "aws_s3_bucket_readable", {uri:  s3_uri, public: true}
+              end
 
+              ### and if we got it there, no need to continue
+              next unless !exists 
+
+              #### but if not, try the old format 
               s3_uri = "https://s3.amazonaws.com/#{bucket_name}"
-              exists = check_existence_unauthenticated(s3_uri)
-              _create_entity("AwsS3Bucket", {
-                "name" => "#{s3_uri}",
-                "uri" => "#{s3_uri}",
-                "authenticated" => false,
-              }) if exists
+              exists = check_existence_unauthenticated(s3_uri,bucket_name)
+
+              if exists 
+
+                _create_entity("AwsS3Bucket", {
+                  "name" => "#{s3_uri}",
+                  "uri" => "#{s3_uri}",
+                  "authenticated" => false,
+                }) 
+
+                # create a bucket issue
+                _create_linked_issue "aws_s3_bucket_readable", {uri:  s3_uri, public: true}
+              end
 
             end # end if opt_use_creds
 
@@ -168,20 +191,29 @@ class AwsS3Brute < BaseTask
 
   end
 
+  def check_existence_unauthenticated(s3_uri, key)
+    response = http_get_body("#{s3_uri}?max-keys=1")
+    exists = false
+    return exists unless response
 
-  def check_existence_unauthenticated(s3_uri)
-    result = http_get_body("#{s3_uri}?max-keys=1")
-    return unless result
-
-    doc = Nokogiri::HTML(result)
+    doc = Nokogiri::HTML(response)
     if  ( doc.xpath("//code").text =~ /NoSuchBucket/ ||
           doc.xpath("//code").text =~ /InvalidBucketName/ ||
           doc.xpath("//code").text =~ /AllAccessDisabled/ ||
           doc.xpath("//code").text =~ /AccessDenied/ ||
           doc.xpath("//code").text =~ /PermanentRedirect/)
-      _log_error "Got response: #{doc.xpath("//code").text} (#{s3_uri})"
-    else
+
+      _log_error "Got negative response: #{doc.xpath("//code").text} (#{s3_uri})"
+
+    elsif doc.xpath("//name").text =~ /#{key}/
+      
+      _log "Got positive response: #{response}"
       exists = true
+
+    else 
+
+      _log "Got unknown response: #{response}"
+
     end
 
   exists # will be nil if we got nothing
@@ -199,11 +231,14 @@ class AwsS3Brute < BaseTask
 
     s3_uri = "https://#{bucket_name}.s3.amazonaws.com/"
 
-    begin # check prefix
+    begin
+      # check prefix
       s3 = Aws::S3::Client.new({region: 'us-east-1'})
       resp = s3.list_objects(bucket: "#{bucket_name}", max_keys: 1000)
       exists = true
 
+    rescue Aws::S3::Errors::PermanentRedirect => e 
+      _log_error "Permanent redirect: #{e} (region?)"
     rescue *s3_errors => e
       _log_error "S3 error: #{e} (#{bucket_name})"
     end

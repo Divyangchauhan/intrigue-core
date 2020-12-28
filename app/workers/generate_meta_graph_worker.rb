@@ -2,15 +2,15 @@ module Intrigue
 module Workers
 class GenerateMetaGraphWorker
   include Sidekiq::Worker
-  sidekiq_options :queue => "app", :backtrace => true
+  sidekiq_options :queue => "graph", :backtrace => true
 
   def perform(id)
 
     # Get the right object
-    project = Intrigue::Model::Project.where(:id => id).first
+    project = Intrigue::Core::Model::Project.where(:id => id).first
 
     begin
-      puts "Starting META graph generation for #{project.name}!"
+      puts "Starting Meta-graph generation for #{project.name}!"
 
       # Notify that it's in progress
       project.graph_generation_in_progress = true
@@ -20,7 +20,7 @@ class GenerateMetaGraphWorker
       project.graph_json = generate_meta_graph(project)
       project.graph_generated_at = DateTime.now
 
-      puts "Done with META graph generation for #{project.name}!"
+      puts "Done with Meta-graph generation for #{project.name}!"
       puts "Length: #{project.graph_json.length}"
     ensure
       project.graph_generation_in_progress = false
@@ -38,7 +38,7 @@ class GenerateMetaGraphWorker
 #      params[:search_string] == "" ? @search_string = nil : @search_string = params[:search_string]
 #      params[:entity_types] == "" ? @entity_types = nil : @entity_types = params[:entity_types]
 
-    selected_entities = Intrigue::Model::Entity.scope_by_project(project.name).where(:hidden => false)
+    selected_entities = Intrigue::Core::Model::Entity.scope_by_project(project.name).where(:hidden => false)
 
     ## Filter if we have a type
 #      selected_entities = selected_entities.where(:type => @entity_types) if @entity_types

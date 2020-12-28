@@ -13,7 +13,7 @@ class TcpBindAndCollect < BaseTask
       :description => "Given a set of ports (or all), bind and collect all connections",
       :references => [],
       :type => "discovery",
-      :passive => false,
+      :passive => true,
       :allowed_types => ["String"],
       :example_entities =>  [{"type" => "String", "details" => {"name" => "default"}}],
       :allowed_options => [
@@ -21,7 +21,8 @@ class TcpBindAndCollect < BaseTask
         {:name => "notify", :regex=> "boolean", :default => true },
         {:name => "create_entity", :regex=> "boolean", :default => true }
       ],
-      :created_types => ["String"]
+      :created_types => ["String"],
+      :queue => "app"
     }
   end
 

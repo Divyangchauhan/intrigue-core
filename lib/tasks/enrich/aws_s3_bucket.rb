@@ -66,12 +66,19 @@ class AwsS3Bucket < Intrigue::Task::BaseTask
     _log "interesting files: #{interesting_files}"
     _log "downloadable files: #{downloadable_files}"
 
-    # this should be a "Finding" or some sort of success event ?
     if interesting_files.sort.uniq.count > 0
-      _notify("Interesting Files: #{interesting_files}")
+      ###########################################
+      ###      New Issue                      ###
+      ###########################################
+      _create_linked_issue("aws_s3_bucket_data_leak", {
+        status: "confirmed",
+        detailed_description: "Interesting files located in #{bucket_uri}",
+        details: {
+          interesting_files: interesting_files,
+          uri: bucket_uri
+          }
+      })
     end
-
-    ### TODO - determine if scoped
 
   end
 
@@ -117,7 +124,7 @@ class AwsS3Bucket < Intrigue::Task::BaseTask
 
         # handle our interesting files
         large_file_size = _get_option("large_file_size")
-        file_size = (size * 1.0) / 1000000
+        file_size = (size * 1.0) / 100000
         if ((file_size > large_file_size) && bucket_resp.code.to_i == 200)
           unless matches_ignore_list(item_uri)
             _log "Interesting File: #{item_uri} (#{size*1.0/1000000}MB)"

@@ -25,6 +25,7 @@ class NetBlock < Intrigue::Task::BaseTask
 
     netblock_string = _get_entity_name
     lookup_string = _get_entity_name.split("/").first
+    cidr_string = _get_entity_name.split("/").last
 
     if _get_entity_detail "whois_full_text" # skip lookup if we already have it
       _log "Skipping lookup, we already have the details"
@@ -35,12 +36,29 @@ class NetBlock < Intrigue::Task::BaseTask
       out = out.merge({"name" => netblock_string, "_hidden_name" => netblock_string})
       # lazy but easier than setting invidually
       _log "Setting entity details to... #{out}"
-      _set_entity_details out
+      _get_and_set_entity_details out
     end
 
-    # check transferred
-    if out["whois_full_text"] =~ /Early Registrations, Transferred to/
-      _set_entity_detail "transferred", true
+
+    ###
+    ### Find related netblock via whois
+    ###
+    whois_text = _get_entity_detail("whois_full_text")
+    if whois_text
+      # okay now, let's check to see if there's a reference to a more specific block here
+      netblock_regex = /(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}\/(\d{1,2}))/
+      match_captures = whois_text.scan(netblock_regex)
+      match_captures.each do |capture|
+        # create it 
+        netblock = capture.first
+        _log "Found related netblock: #{netblock}"
+        _create_entity "NetBlock", { "name" => "#{netblock}" }
+      end
+
+      # check transferred
+      if whois_text =~ /Early Registrations, Transferred to/
+        _set_entity_detail "transferred", true
+      end
     end
 
     # check ipv6
@@ -49,48 +67,45 @@ class NetBlock < Intrigue::Task::BaseTask
     end
 
     ###
-    ### Determine if SCOPED!!!
+    ### Clean up org name ... some examples:
     ###
 
-    # Check new entities that we've scoped
-    scoped_entity_types = [
-      "Intrigue::Entity::Organization",
-      "Intrigue::Entity::DnsRecord",
-      "Intrigue::Entity::Domain" ]
+    #org-name:       Acme Sciences, Inc.      
+    #Organization:   Acme sciences (ACME-3)\n
+    #Organization:   Confluence Networks Inc (CN)
+    #Organization:   CyrusOne LLC (CL-260)
+    #Organization:   Rackspace Hosting (RACKS-8)
+    existing_org_name = _get_entity_detail("organization_name")
+    unless existing_org_name && existing_org_name.length >  0 
+   
+      org_name = nil
+      org_regex = /org-name:.*$/i
+      match_captures = "#{whois_text}".scan(org_regex)
+      org_name = match_captures.last
 
-    # check seeds
-    if @entity.project.seeds
-      @entity.project.seeds.each do |s|
-        next unless scoped_entity_types.include? s["type"]
-        if out["whois_full_text"] =~ /#{Regexp.escape(s["name"])}/
-          _log "Marking as scoped: SEED ENTITY NAME MATCHED TEXT: #{s["name"]}}"
-          @entity.scoped = true
-          @entity.save
-          return
-        end
-      end
-    end
-
-    # Check new entities that we've scoped in
-    @entity.project.entities.where(:scoped => true, :type => scoped_entity_types ).each do |e|
-
-      # make sure we skip any dns entries that are not fqdns. this will prevent
-      # auto-scoping on a single name like "log" or even a number like "1"
-      next if (e.type == "DnsRecord" || e.type == "Domain") && e.name.split(".").count == 1
-
-      if out["whois_full_text"] =~ /#{Regexp.escape(e.name)}/
-        _log "Marking as scoped: PROJECT ENTITY MATCHED TEXT: #{e.type}##{e.name}"
-        @entity.scoped = true
-        @entity.save
-        return
+      unless org_name
+        org_regex = /Customer:.*$/i
+        match_captures = "#{whois_text}".scan(org_regex)
+        org_name = match_captures.last  
       end
 
-    end
+      unless org_name
+        org_regex = /Organization:.*$/i
+        match_captures = "#{whois_text}".scan(org_regex)
+        org_name = match_captures.last  
+      end
 
-    if @entity.created_by?("search_bgp")
-      _log "Marking as scoped: CREATED BY SEARCH_BGP"
-      @entity.scoped = true
-      @entity.save
+      unless org_name
+        org_regex = /descr:.*$/i
+        match_captures = "#{whois_text}".scan(org_regex)
+        org_name = match_captures.last  
+      end
+      
+      if org_name
+        clean_org_name = "#{org_name}".split(":").last.strip
+        _set_entity_detail("organization_name", clean_org_name) 
+      end
+
     end
 
   end

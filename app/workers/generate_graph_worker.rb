@@ -2,12 +2,12 @@ module Intrigue
 module Workers
 class GenerateGraphWorker
   include Sidekiq::Worker
-  sidekiq_options :queue => "app", :backtrace => true
+  sidekiq_options :queue => "graph", :backtrace => true
 
   def perform(id)
 
     # Get the right object
-    project = Intrigue::Model::Project.where(:id => id).first
+    project = Intrigue::Core::Model::Project.where(:id => id).first
 
     begin
       puts "Starting graph generation for #{project.name}!"
@@ -28,7 +28,6 @@ class GenerateGraphWorker
     end
 
   end
-
 
   def generate_graph(project)
     # generate the nodes

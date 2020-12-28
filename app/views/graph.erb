@@ -48,7 +48,7 @@ function delete_entity_children(id){
   });
 
   // We setup our request & send it
-  XHR.open('GET', "/<%=@project_name%>/entities/" + id + "/delete_children");
+  XHR.open('GET', "/<%=h @project_name%>/entities/" + id + "/delete_children");
   XHR.send();
 }
 </script>
@@ -70,9 +70,9 @@ function delete_entity_children(id){
       defaultNodeColor: '#FFFFFF',
       defaultEdgeColor: '#00B8E6',
       defaultLabelColor:'#FFFFFF',
-      defaultLabelSize: 11,
-      labelThreshold: 7,
-      edgeHoverSizeRatio: 3,
+      defaultLabelSize: 8,
+      labelThreshold: 5,
+      edgeHoverSizeRatio: 10,
       edgeHoverColor: '#ff0000',
       defaultNodeHoverColor: '#ff0000',
       edgeColor: 'default'
@@ -87,9 +87,9 @@ function delete_entity_children(id){
     });
 
     // adjust slowdown based on the size
-    var slowdown = 50;
+    var slowdown = 200;
     if (s.graph.nodes().length > 1000) {
-      slowdown = 10;
+      slowdown = 20;
     }
 
     // start the layout

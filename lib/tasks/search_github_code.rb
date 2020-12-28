@@ -12,14 +12,23 @@ class SearchGithubCode < BaseTask
       :references => [],
       :type => "discovery",
       :passive => true,
-      :allowed_types => ["GithubAccount","GithubRepository"],
+      :allowed_types => [ 
+        "Domain", 
+        "DnsRecord", 
+        "GithubAccount", 
+        "GithubRepository", 
+        "Organization",
+        "String", 
+        "UniqueKeyword", 
+        "UniqueToken"
+      ],
       :example_entities => [
         {"type" => "GithubAccount", "details" => {"name" => "intrigueio"}}],
       :allowed_options => [
-        {:name => "keywords", :regex => "alpha_numeric", :default => "password" },
-        {:name => "max_item_count", :regex => "integer", :default => 5 },
+        {:name => "keywords", :regex => "alpha_numeric", :default => "" },
+        {:name => "max_item_count", :regex => "integer", :default => 100 },
       ],
-      :created_types => ["Info"]
+      :created_types => ["GithubSearchResult"]
     }
   end
 
@@ -32,11 +41,18 @@ class SearchGithubCode < BaseTask
     keywords = _get_option "keywords"
 
     keywords.split(",").each do |keyword|
+      
       # Search users
       if entity_type == "GithubAccount"
         search_uri = "https://api.github.com/search/code?q=#{keyword} user:#{entity_name}"
       elsif entity_type == "GithubRepository"
         search_uri = "https://api.github.com/search/code?q=#{keyword} repo:#{entity_name}"
+      elsif ( entity_type == "Domain"      || 
+              entity_type == "DnsRecord"   || 
+              entity_type == "String"      || 
+              entity_type == "UniqueToken" || 
+              entity_type == "UniqueKeyword" )
+        search_uri = "https://api.github.com/search/code?q=#{entity_name}"
       end
 
       response = _get_json_response(search_uri)
@@ -49,11 +65,12 @@ class SearchGithubCode < BaseTask
 
       # only do 10 items max
       items[0..max_item_count].each do |result|
+        
         #_log "Processing #{result}"
-        _create_entity "Info", {
+        _create_entity "GithubSearchResult", {
           "name" => result["path"],
           "uri" => result["html_url"],
-          "raw" => result
+          "github" => result
         }
       end
     end
@@ -70,7 +87,7 @@ class SearchGithubCode < BaseTask
 
     # TODO deal with pagination here
 
-    _log "API responded with #{response["total_count"]} items!"
+    _log "API responded with #{response["total_count"] || 0} items!"
 
   response
   end

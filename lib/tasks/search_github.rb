@@ -1,7 +1,6 @@
 module Intrigue
 module Task
 class SearchGithub < BaseTask
-  include Intrigue::Task::Web
 
   def self.metadata
     {
@@ -12,11 +11,20 @@ class SearchGithub < BaseTask
       :references => [],
       :type => "discovery",
       :passive => true,
-      :allowed_types => ["Organization","String"],
+      :allowed_types => [ 
+        "Domain", 
+        "DnsRecord", 
+        "GithubAccount", 
+        "GithubRepository", 
+        "Organization",
+        "String", 
+        "UniqueKeyword", 
+        "UniqueToken"
+      ],
       :example_entities => [
         {"type" => "String", "details" => {"name" => "intrigue"}}],
       :allowed_options => [],
-      :created_types => ["GithubRepository","GithubAccount"]
+      :created_types => [ "GithubRepository", "GithubAccount" ]
     }
   end
 
@@ -28,26 +36,28 @@ class SearchGithub < BaseTask
 
     # Search users
     search_uri = "https://api.github.com/search/users?q=#{entity_name}"
-    response = _get_response(search_uri)
+    response = _get_github_response(search_uri)
+    
     # Create
     response["items"].each do |result|
       _create_entity "GithubAccount", {
         "name" => result["login"],
         "uri" => result["html_url"],
-        "account_type" => result["type"],
-        "raw" => result
+        "type" => result["type"],
+        "github" => result
       }
     end
 
     # Search repositories
     search_uri = "https://api.github.com/search/repositories?q=#{entity_name}"
-    response = _get_response(search_uri)
+    response = _get_github_response(search_uri)
+
     # Create
     response["items"].each do |result|
       _create_entity "GithubRepository", {
         "name" => result["full_name"],
         "uri" => result["html_url"],
-        "raw" => result
+        "github" => result
       }
     end
 
@@ -56,8 +66,8 @@ class SearchGithub < BaseTask
       _create_entity "GithubAccount", {
         "name" => result["owner"]["login"],
         "uri" => result["owner"]["html_url"],
-        "account_type" => result["owner"]["type"],
-        "raw" => result["owner"]
+        "type" => result["owner"]["type"],
+        "github" => result["owner"]
       }
     end
 
@@ -66,16 +76,15 @@ class SearchGithub < BaseTask
     #response = _search_github(search_uri,"GithubIssue")
     #_parse_items response["items"]
 
-
   end
 
-  def _get_response(uri)
+  def _get_github_response(uri)
 
     begin
       response = JSON.parse(http_get_body(uri))
     rescue JSON::ParserError
       _log "Error retrieving results"
-      raise []
+      response = []
     end
 
     # TODO deal with pagination here

@@ -1,17 +1,18 @@
 module Intrigue
 module Entity
-class AwsS3Bucket < Intrigue::Model::Entity
+class AwsS3Bucket < Intrigue::Core::Model::Entity
 
   def self.metadata
     {
       :name => "AwsS3Bucket",
       :description => "An S3 Bucket",
-      :user_creatable => false
+      :user_creatable => true,
+      :example => "http://s3.amazonaws.com/bucket/"
     }
   end
 
   def validate_entity
-    name =~ /s3.amazonaws.com/
+    name =~ /s3/ && name =~ /.amazonaws.com/
   end
 
   def detail_string
@@ -20,6 +21,12 @@ class AwsS3Bucket < Intrigue::Model::Entity
 
   def enrichment_tasks
     ["enrich/aws_s3_bucket"]
+  end
+
+  def scoped?(conditions={})
+    return true if self.allow_list
+    return false if self.deny_list
+  true # otherwise just default to true
   end
 
 end

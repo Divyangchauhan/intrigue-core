@@ -13,12 +13,11 @@ class ImportAwsIpv4Ranges < BaseTask
       :references => [],
       :type => "import",
       :passive => true,
-      :allowed_types => ["*"],
+      :allowed_types => ["AwsRegion"],
       :example_entities => [
-        {"type" => "String", "details" => {"name" => "all"}}
+        {"type" => "AwsRegion", "details" => {"name" => "us-east-1"}}
       ],
       :allowed_options => [
-        {:name => "region", :regex => "alpha_numeric", :default => "all" },
         {:name => "service", :regex => "alpha_numeric", :default => "EC2" },
         {:name => "limit", :regex => "alpha_numeric", :default => 10000 },
       ],
@@ -30,7 +29,7 @@ class ImportAwsIpv4Ranges < BaseTask
   def run
     super
 
-    region =  _get_option("region") || "all"
+    region =  _get_entity_name || "all"
     service = _get_option("service") || "EC2"
     limit = _get_option("limit").to_i || 10000
 
@@ -50,7 +49,10 @@ class ImportAwsIpv4Ranges < BaseTask
       _log " -> Creating #{prefix}"
 
       _create_entity("NetBlock", {
-         "name" => "#{prefix}", "aws_region" => region, "aws_service" => service
+         "name" => "#{prefix}", 
+         "aws_region" => region, 
+         "aws_service" => service, 
+         "scoped" => true
       })
     end
 
